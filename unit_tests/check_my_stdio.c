@@ -24,7 +24,7 @@ START_TEST(test_rm_lambda_3verts_2lambdas)
 
     new_graph = remove_lambda_transitions(graph);
 
-    rc = graph_compare(new_graph, exp_graph);
+    rc = compare_graphs(new_graph, exp_graph);
     ck_assert_int_eq(rc, GRAPHS_EQUAL);
 
     free_graph(graph);
@@ -49,7 +49,7 @@ START_TEST(test_rm_lambda_4verts_2lambdas_recursive)
 
     new_graph = remove_lambda_transitions(graph);
 
-    rc = graph_compare(new_graph, exp_graph);
+    rc = compare_graphs(new_graph, exp_graph);
     ck_assert_int_eq(rc, GRAPHS_EQUAL);
 
     free_graph(graph);
@@ -72,14 +72,14 @@ START_TEST(test_rm_lambda_5verts_3lambdas_recursive)
     exp_graph = graph_from_file(DATA_FOLDER POS_OUT("03"));
     ck_assert_ptr_nonnull(exp_graph);
 
-    graph_visualize(graph, "temp");
+    // graph_visualize(graph, "temp");
 
     new_graph = remove_lambda_transitions(graph);
 
-    graph_visualize(new_graph, "temp_wo_lambda");
-    graph_visualize(exp_graph, "temp_exp");
+    // graph_visualize(new_graph, "temp_wo_lambda");
+    // graph_visualize(exp_graph, "temp_exp");
 
-    rc = graph_compare(new_graph, exp_graph);
+    rc = compare_graphs(new_graph, exp_graph);
     ck_assert_int_eq(rc, GRAPHS_EQUAL);
 
     free_graph(graph);
