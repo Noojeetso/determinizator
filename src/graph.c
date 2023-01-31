@@ -396,29 +396,29 @@ int graph_contains_arc(graph_t *graph, int from_number, int to_number, char valu
     return 0;
 }
 
-graph_t *remove_lambda_transitions(graph_t *graph)  // , history_t *history)
+graph_t *remove_lambda_transitions(const graph_t *graph)  // , history_t *history)
 {
     // int rc;
-    adjacecny_list_t *adjacency_list;
-    adjacecny_list_t *new_adjacency_list;
+    const adjacecny_list_t *list;
+    adjacecny_list_t *new_list;
     node_t *root;
     node_t *curr;
     int number;
     queue_t *queue = new_queue();
     graph_t *new_graph = create_graph(INIT_GRAPH_SIZE);
 
-    adjacency_list = &graph->adjacency_list;
+    list = &graph->adjacency_list;
     // history = new_history();
 
-    // Filter vertices
-    for (size_t i = 0; i < adjacency_list->max_size; i++)
+    // Leave only those vertices to which non-lambda transitions exist
+    for (size_t i = 0; i < list->max_size; i++)
     {
-        root = adjacency_list->vertices[i];
+        root = list->vertices[i];
         if (root == NULL)
             continue;
         // printf("root_num: %d\n", root->number);
         // printf("root_val: %c\n", root->value);
-        if (root->value != '\0')
+        if ((root->value & INPUT_VERTEX) == INPUT_VERTEX)
         {
             graph_add_vertex(new_graph, root->number, root->value);
         }
@@ -429,21 +429,21 @@ graph_t *remove_lambda_transitions(graph_t *graph)  // , history_t *history)
             // printf("curr_val: %c\n", curr->value);
             if (curr->value != '~')
             {
-                graph_add_vertex(new_graph, curr->number, '\0');
+                graph_add_vertex(new_graph, curr->number, list->vertices[curr->number]->value);
             }
         }
     }
-    new_adjacency_list = &new_graph->adjacency_list;
+    new_list = &new_graph->adjacency_list;
 
     int found_lambda = 1;
     while (found_lambda)
     {
         found_lambda = 0;
 
-        for (size_t i = 0; i < adjacency_list->max_size; i++)
+        for (size_t i = 0; i < list->max_size; i++)
         {
-            root = adjacency_list->vertices[i];
-            if (root == NULL || new_adjacency_list->vertices[root->number] == NULL)
+            root = list->vertices[i];
+            if (root == NULL || new_list->vertices[root->number] == NULL)
                 continue;
 
             for (curr = root->next; curr != NULL; curr = curr->next)
@@ -457,6 +457,8 @@ graph_t *remove_lambda_transitions(graph_t *graph)  // , history_t *history)
                     }
                     continue;
                 }
+                if (list->vertices[curr->number] != NULL)
+                    graph_add_vertex(new_graph, root->number, list->vertices[curr->number]->value & OUTPUT_VERTEX);
                 if (!queue_contains(queue, curr->number))
                     queue_push(queue, curr->number);
             }
@@ -464,7 +466,7 @@ graph_t *remove_lambda_transitions(graph_t *graph)  // , history_t *history)
             while (!is_queue_empty(queue))
             {
                 queue_pop(queue, &number);
-                for (curr = adjacency_list->vertices[number]->next; curr != NULL; curr = curr->next)
+                for (curr = list->vertices[number]->next; curr != NULL; curr = curr->next)
                 {
                     if (curr->value != '~')
                     {
@@ -475,6 +477,8 @@ graph_t *remove_lambda_transitions(graph_t *graph)  // , history_t *history)
                         }
                         continue;
                     }
+                    if (list->vertices[curr->number] != NULL)
+                        graph_add_vertex(new_graph, root->number, list->vertices[curr->number]->value & OUTPUT_VERTEX);
                     if (!queue_contains(queue, curr->number) && number != curr->number && number != root->number)
                         queue_push(queue, curr->number);
                 }
@@ -547,7 +551,7 @@ int write_graph_connections(FILE *file, graph_t *graph, void *arg)
             if (rc == EOF)
                 return rc;
             from_style = "wedged";
-            from_color = GREEN":"RED;
+            from_color = RED":"GREEN;
             rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
                          root->number, from_style, from_color);
         }
@@ -578,7 +582,7 @@ int write_graph_connections(FILE *file, graph_t *graph, void *arg)
             if (rc == EOF)
                 return rc;
 
-            if (adjacency_list->vertices[curr->number] != NULL && adjacency_list->vertices[curr->number]->value != '\0')
+            if (adjacency_list->vertices[curr->number] != NULL && adjacency_list->vertices[curr->number]->value != INTER_VERTEX)
                 continue;
 
             rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
@@ -589,6 +593,27 @@ int write_graph_connections(FILE *file, graph_t *graph, void *arg)
     }
 
     return EXIT_SUCCESS;
+}
+
+void print_adjacency_list(graph_t *graph)
+{
+    node_t *root;
+    adjacecny_list_t *list = &graph->adjacency_list;
+    for (size_t i = 0; i < list->max_size; i++)
+    {
+        root = list->vertices[i];
+        if (root == NULL)
+            continue;
+        printf("%d (%d): ", root->number, root->value);
+
+        for (node_t *curr = root->next; curr != NULL; curr = curr->next)
+        {
+            printf("%d (%c)|", curr->number, curr->value);
+        }
+
+        putc('\n', stdout);
+    }
+    putc('\n', stdout);
 }
 
 int compare_graphs(graph_t *graph_a, graph_t *graph_b)

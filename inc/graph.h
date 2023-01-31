@@ -32,7 +32,9 @@ graph_t *graph_from_file(char *filename);
 
 int write_graph_connections(FILE *file, graph_t *graph, void *arg);
 
-graph_t *remove_lambda_transitions(graph_t *graph);  // , history_t *history)
+graph_t *remove_lambda_transitions(const graph_t *graph);  // , history_t *history)
+
+void print_adjacency_list(graph_t *graph);
 
 int compare_graphs(graph_t *graph_a, graph_t *graph_b);
 
