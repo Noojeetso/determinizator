@@ -531,8 +531,8 @@ int write_graph_connections(FILE *file, graph_t *graph, void *arg)
             rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
                          root->number, from_style, from_color);
         }
-        else if ((root->value & VERTEX_MASK) == INPUT_VERTEX &&
-                 (root->value & VERTEX_MASK) == OUTPUT_VERTEX)
+        else if ((root->value & INPUT_VERTEX) == INPUT_VERTEX &&
+                 (root->value & OUTPUT_VERTEX) == OUTPUT_VERTEX)
         {
             rc = fprintf(file, "0->%d;\n", root->number);
             if (rc == EOF)
