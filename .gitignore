@@ -1,0 +1,5 @@
+out
+*.exe
+compile_commands.json
+.cache
+/*.txt
