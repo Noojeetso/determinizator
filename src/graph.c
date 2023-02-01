@@ -396,21 +396,14 @@ int graph_contains_arc(graph_t *graph, int from_number, int to_number, char valu
     return 0;
 }
 
-graph_t *remove_lambda_transitions(const graph_t *graph)  // , history_t *history)
+// Leave only those vertices to which non-lambda transitions exist
+void filter_vertices(const graph_t *source_graph, graph_t *new_graph)
 {
-    // int rc;
     const adjacecny_list_t *list;
-    adjacecny_list_t *new_list;
     node_t *root;
-    node_t *curr;
-    int number;
-    queue_t *queue = new_queue();
-    graph_t *new_graph = create_graph(INIT_GRAPH_SIZE);
 
-    list = &graph->adjacency_list;
-    // history = new_history();
+    list = &source_graph->adjacency_list;
 
-    // Leave only those vertices to which non-lambda transitions exist
     for (size_t i = 0; i < list->max_size; i++)
     {
         root = list->vertices[i];
@@ -433,7 +426,24 @@ graph_t *remove_lambda_transitions(const graph_t *graph)  // , history_t *histor
             }
         }
     }
+}
+
+int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph)
+{
+    queue_t *queue;
+    const adjacecny_list_t *list;
+    const adjacecny_list_t *new_list;
+    node_t *root;
+    node_t *curr;
+    int number;
+    int rc;
+
+    list = &source_graph->adjacency_list;
     new_list = &new_graph->adjacency_list;
+
+    queue = new_queue();
+    if (queue == NULL)
+        return ERR_NO_MEMORY;
 
     int found_lambda = 1;
     while (found_lambda)
@@ -452,41 +462,101 @@ graph_t *remove_lambda_transitions(const graph_t *graph)  // , history_t *histor
                 {
                     if (!graph_contains_arc(new_graph, root->number, curr->number, curr->value))
                     {
+                        rc = graph_add_arc(new_graph, root->number, curr->number, curr->value);
+                        if (rc != EXIT_SUCCESS)
+                        {
+                            free_queue(queue);
+                            return rc;
+                        }
                         found_lambda = 1;
-                        graph_add_arc(new_graph, root->number, curr->number, curr->value);
                     }
                     continue;
                 }
                 if (list->vertices[curr->number] != NULL)
-                    graph_add_vertex(new_graph, root->number, list->vertices[curr->number]->value & OUTPUT_VERTEX);
+                {
+                    rc = graph_add_vertex(new_graph, root->number, list->vertices[curr->number]->value & OUTPUT_VERTEX);
+                    if (rc != EXIT_SUCCESS)
+                    {
+                        free_queue(queue);
+                        return rc;
+                    }
+                }
                 if (!queue_contains(queue, curr->number))
-                    queue_push(queue, curr->number);
+                {
+                    rc = queue_push(queue, curr->number);
+                    if (rc != EXIT_SUCCESS)
+                    {
+                        free_queue(queue);
+                        return rc;
+                    }
+                }
             }
 
             while (!is_queue_empty(queue))
             {
-                queue_pop(queue, &number);
+                rc = queue_pop(queue, &number);
+                if (rc != EXIT_SUCCESS)
+                {
+                    free_queue(queue);
+                    return rc;
+                }
                 for (curr = list->vertices[number]->next; curr != NULL; curr = curr->next)
                 {
                     if (curr->value != '~')
                     {
                         if (!graph_contains_arc(new_graph, root->number, curr->number, curr->value))
                         {
+                            rc = graph_add_arc(new_graph, root->number, curr->number, curr->value);
+                            if (rc != EXIT_SUCCESS)
+                            {
+                                free_queue(queue);
+                                return rc;
+                            }
                             found_lambda = 1;
-                            graph_add_arc(new_graph, root->number, curr->number, curr->value);
                         }
                         continue;
                     }
                     if (list->vertices[curr->number] != NULL)
-                        graph_add_vertex(new_graph, root->number, list->vertices[curr->number]->value & OUTPUT_VERTEX);
+                    {
+                        rc = graph_add_vertex(new_graph, root->number, list->vertices[curr->number]->value & OUTPUT_VERTEX);
+                        if (rc != EXIT_SUCCESS)
+                        {
+                            free_queue(queue);
+                            return rc;
+                        }
+                    }
                     if (!queue_contains(queue, curr->number) && number != curr->number && number != root->number)
-                        queue_push(queue, curr->number);
+                    {
+                        rc = queue_push(queue, curr->number);
+                        if (rc != EXIT_SUCCESS)
+                        {
+                            free_queue(queue);
+                            return rc;
+                        }
+                    }
                 }
             }
         }
     }
 
     free_queue(queue);
+
+    return EXIT_SUCCESS;
+}
+
+graph_t *remove_lambda_transitions(const graph_t *graph)  // , history_t *history)
+{
+    int rc;
+    graph_t *new_graph = create_graph(INIT_GRAPH_SIZE);
+
+    // history = new_history();
+    filter_vertices(graph, new_graph);
+    rc = add_non_lambda_transitions(graph, new_graph);
+    if (rc != EXIT_SUCCESS)
+    {
+        free_graph(new_graph);
+        return NULL;
+    }
 
     return new_graph;
 }
@@ -507,8 +577,7 @@ int write_graph_connections(FILE *file, graph_t *graph, void *arg)
         root = adjacency_list->vertices[i];
         if (root == NULL)
             continue;
-        // printf("root_num: %d\n", root->number);
-        // printf("root_val: %c\n", root->value);
+
         if ((root->value & VERTEX_MASK) == INPUT_VERTEX)
         {
             rc = fprintf(file, "0->%d;\n", root->number);
@@ -550,7 +619,7 @@ int write_graph_connections(FILE *file, graph_t *graph, void *arg)
             rc = fprintf(file, "%d [style=\"invisible\"];\n", -root->number);
             if (rc == EOF)
                 return rc;
-            from_style = "wedged";
+            from_style = WEDGED;
             from_color = RED":"GREEN;
             rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
                          root->number, from_style, from_color);
@@ -558,10 +627,6 @@ int write_graph_connections(FILE *file, graph_t *graph, void *arg)
 
         for (node_t *curr = root->next; curr != NULL; curr = curr->next)
         {
-            // printf("curr_num: %d\n", curr->number);
-            // printf("curr_val: %c\n", curr->value);
-
-            // printf("root: %d curr: %d val: %d\n", root->number, curr->number, root->value);
             from_style = "";
             from_color = "";
 
@@ -572,13 +637,9 @@ int write_graph_connections(FILE *file, graph_t *graph, void *arg)
             }
 
             if (curr->value != '~')
-            {
                 rc = fprintf(file, "%d -> %d [label=\"%c\"];\n", root->number, curr->number, curr->value);
-            }
             else
-            {
                 rc = fprintf(file, "%d -> %d [label=\"λ\"];\n", root->number, curr->number);
-            }
             if (rc == EOF)
                 return rc;
 

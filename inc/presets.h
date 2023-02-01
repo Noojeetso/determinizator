@@ -11,6 +11,7 @@
 #define READ_WRITE_MODE "r+"
 
 #define FILLED "filled"
+#define WEDGED "wedged"
 #define DEFAULT "lightgrey"
 #define ORANGE "#fff2d0"
 #define GREEN "#ddffb7"
