@@ -17,34 +17,10 @@ typedef struct adjacency_list
     size_t max_size;
 } adjacecny_list_t;
 
-typedef struct alias
-{
-    char name;
-    char *array;
-    size_t length;
-    size_t max_length;
-} alias_t;
-
-typedef struct operation operation_t;
-
-struct operation
-{
-    node_t *removed;
-    node_t *created;
-    operation_t *next;
-    operation_t *prev;
-};
-
-typedef struct history
-{
-    operation_t *head;
-    operation_t *tail;
-    operation_t *curr;
-} history_t;
-
 struct graph
 {
     adjacecny_list_t adjacency_list;
+    operation_t *last_operation;
 };
 
 node_t *new_node(int number, char value)
@@ -106,11 +82,12 @@ graph_t *create_graph(size_t init_size)
         vertices[i] = NULL;
     }
 
+    new_graph->last_operation = NULL;
+
     return new_graph;
 }
 
-int
-graph_expand(graph_t *graph, size_t new_size)
+int graph_expand(graph_t *graph, size_t new_size)
 {
     node_t **new_vertices;
     size_t new_max_size = (size_t)(new_size * GRAPH_EXPAND_FACTOR);
@@ -146,8 +123,7 @@ void free_list(node_t *head)
     }
 }
 
-void
-free_graph(graph_t *graph)
+void free_graph(graph_t *graph)
 {
     for (size_t i = 0; i < graph->adjacency_list.max_size; i++)
     {
@@ -157,18 +133,76 @@ free_graph(graph_t *graph)
     free(graph);
 }
 
+int graph_remove_vertex(graph_t *graph, int number, vertex_type_t vertex_type)
+{
+    adjacecny_list_t *list;
+    list = &graph->adjacency_list;
+    node_t *root;
+
+    root = list->vertices[number];
+    if (root == NULL)
+        return ERR_NULL_POINTER;
+
+    root->value -= root->value & vertex_type;
+    if (root->value == NO_VERTEX)
+    {
+        if (root->next != NULL)
+            return EXIT_FAILURE;
+        free(root);
+        list->vertices[number] = NULL;
+    }
+    else
+    {
+        // root->value |= INTER_VERTEX;
+    }
+
+    return EXIT_SUCCESS;
+}
+
+int graph_remove_arc(graph_t *graph, const int from_number, const int to_number, char value)
+{
+    adjacecny_list_t *list;
+    node_t *curr;
+    node_t *prev;
+
+    list = &graph->adjacency_list;
+    prev = list->vertices[from_number];
+
+    if (prev == NULL)
+        return ERR_NULL_POINTER;
+
+    while (prev->next != NULL)
+    {
+        curr = prev->next;
+        // printf("from: %d to: %d val: %d\n", from_number, curr->number, curr->value);
+        if (to_number == curr->number && value == curr->value)
+        {
+            prev->next = curr->next;
+            // printf("deleted: from: %d to: %d val: %d\n", from_number, curr->number, curr->value);
+            free(curr);
+            return EXIT_SUCCESS;
+        }
+        prev = prev->next;
+    }
+
+    return EXIT_FAILURE;
+}
+
 int graph_add_vertex(graph_t *graph, int number, vertex_type_t vertex_type)
 {
     node_t *vertex;
+    adjacecny_list_t *list;
 
-    vertex = graph->adjacency_list.vertices[number];
+    list = &graph->adjacency_list;
+
+    vertex = list->vertices[number];
     if (vertex != NULL)
     {
         vertex->value = vertex->value | vertex_type;
         return EXIT_SUCCESS;
     }
 
-    if (graph->adjacency_list.max_size <= number)
+    if (list->max_size <= number)
     {
         fputs("Номер создаваемой вершины превышает максимальный\n", stderr);
         return ERR_INPUT_NUMBER;
@@ -178,30 +212,33 @@ int graph_add_vertex(graph_t *graph, int number, vertex_type_t vertex_type)
     if (vertex == NULL)
         return ERR_NO_MEMORY;
 
-    graph->adjacency_list.vertices[number] = vertex;
+    list->vertices[number] = vertex;
 
     return EXIT_SUCCESS;
 }
 
-int graph_add_arc(graph_t *graph, int number_from, int number_to, char value)
+int graph_add_arc(graph_t *graph, const int from_number, const int to_number, const char value)
 {
     int rc;
     node_t *list_node;
+    adjacecny_list_t *list;
+
+    list = &graph->adjacency_list;
 
     // Add root vertex
-    if (graph->adjacency_list.vertices[number_from] == NULL)
+    if (list->vertices[from_number] == NULL)
     {
-        rc = graph_add_vertex(graph, number_from, INTER_VERTEX);
+        rc = graph_add_vertex(graph, from_number, INTER_VERTEX);
         if (rc != EXIT_SUCCESS)
             return rc;
     }
 
     // Add arc
-    list_node = new_node(number_to, value);
+    list_node = new_node(to_number, value);
     if (list_node == NULL)
         return ERR_NO_MEMORY;
 
-    rc = list_push_end(graph->adjacency_list.vertices[number_from], list_node);
+    rc = list_push_end(list->vertices[from_number], list_node);
     if (rc != EXIT_SUCCESS)
         return rc;
 
@@ -225,8 +262,8 @@ size_t char_count(const char *str, char ch)
 int scan_graph_arc(FILE *file, graph_t *graph)
 {
     int rc;
-    int number_from;
-    int number_to;
+    int from_number;
+    int to_number;
     int max_number;
     char value;
     char *str = NULL;
@@ -246,16 +283,16 @@ int scan_graph_arc(FILE *file, graph_t *graph)
     switch (dashes)
     {
         case 1:
-            rc = sscanf(str, "%d->%d %c", &number_from, &number_to, &value);
+            rc = sscanf(str, "%d->%d %c", &from_number, &to_number, &value);
             if (rc != 3)
             {
                 free(str);
                 return ERR_INPUT_NUMBER;
             }
             free(str);
-            // printf("%d: %d->%d %c\n", rc, number_from, number_to, value);
+            // printf("%d: %d->%d %c\n", rc, from_number, to_number, value);
 
-            max_number = MAX(number_from, number_to);
+            max_number = MAX(from_number, to_number);
             if (graph->adjacency_list.max_size < max_number)
             {
                 rc = graph_expand(graph, max_number);
@@ -263,18 +300,18 @@ int scan_graph_arc(FILE *file, graph_t *graph)
                     return rc;
             }
 
-            rc = graph_add_vertex(graph, number_to, INTER_VERTEX);
+            rc = graph_add_vertex(graph, to_number, INTER_VERTEX);
             if (rc != EXIT_SUCCESS)
                 return rc;
 
-            rc = graph_add_arc(graph, number_from, number_to, value);
+            rc = graph_add_arc(graph, from_number, to_number, value);
             if (rc != EXIT_SUCCESS)
                 return rc;
             break;
         case 2:
             if (str[0] == '-')
             {
-                rc = sscanf(str, "-->%d", &number_to);
+                rc = sscanf(str, "-->%d", &to_number);
                 if (rc != 1)
                 {
                     free(str);
@@ -282,13 +319,13 @@ int scan_graph_arc(FILE *file, graph_t *graph)
                 }
                 free(str);
 
-                rc = graph_add_vertex(graph, number_to, INPUT_VERTEX);
+                rc = graph_add_vertex(graph, to_number, INPUT_VERTEX);
                 if (rc != EXIT_SUCCESS)
                     return rc;
             }
             else
             {
-                rc = sscanf(str, "%d-->", &number_from);
+                rc = sscanf(str, "%d-->", &from_number);
                 if (rc != 1)
                 {
                     free(str);
@@ -296,7 +333,7 @@ int scan_graph_arc(FILE *file, graph_t *graph)
                 }
                 free(str);
 
-                rc = graph_add_vertex(graph, number_from, OUTPUT_VERTEX);
+                rc = graph_add_vertex(graph, from_number, OUTPUT_VERTEX);
                 if (rc != EXIT_SUCCESS)
                     return rc;
             }
@@ -362,28 +399,14 @@ graph_t *graph_from_file(char *filename)
     return graph;
 }
 
-history_t *new_history(void)
-{
-    history_t *history;
-    history = malloc(sizeof(history_t));
-    if (history == NULL)
-    {
-        fputs("Ошибка выделения памяти под узел списка\n", stderr);
-        return NULL;
-    }
-    history->curr = NULL;
-    history->curr = NULL;
-    return history;
-}
-
-int graph_contains_arc(graph_t *graph, int from_number, int to_number, char value)
+int graph_contains_arc(const graph_t *graph, int from_number, int to_number, char value)
 {
     node_t *root;
     node_t *curr;
-    adjacecny_list_t *adjacency_list;
-    adjacency_list = &graph->adjacency_list;
+    const adjacecny_list_t *list;
+    list = &graph->adjacency_list;
 
-    root = adjacency_list->vertices[from_number];
+    root = list->vertices[from_number];
     if (root == NULL)
         return 0;
 
@@ -428,7 +451,55 @@ void filter_vertices(const graph_t *source_graph, graph_t *new_graph)
     }
 }
 
-int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph)
+int update_vertex(graph_t *graph, history_t *history, int number, char value)
+{
+    operation_t *operation;
+    int rc;
+    char current_value = 0;
+
+    if (graph->adjacency_list.vertices[number] != NULL)
+        current_value = graph->adjacency_list.vertices[number]->value;
+
+    // printf("update| num: %d, curr: %d, new: %d\n", number, current_value, value);
+
+    operation = operation_add_vertex(number, value - (value & current_value));
+    if (operation == NULL)
+        return ERR_NO_MEMORY;
+    history_push(history, operation);
+
+    rc = graph_add_vertex(graph, number, value);
+    if (rc != EXIT_SUCCESS)
+        return rc;
+
+    return EXIT_SUCCESS;
+}
+
+int update_arc(const graph_t *source_graph, graph_t *new_graph, history_t *history, int from_number, int to_number, char value)
+{
+    operation_t *operation;
+    int rc;
+
+    rc = graph_add_arc(new_graph, from_number, to_number, value);
+    if (rc != EXIT_SUCCESS)
+        return rc;
+
+    if (!graph_contains_arc(source_graph, from_number, to_number, value))
+    {
+        operation = operation_add_arc(from_number, to_number, value);
+        if (operation == NULL)
+            return ERR_NO_MEMORY;
+        history_push(history, operation);
+    }
+
+    return EXIT_SUCCESS;
+}
+
+bool is_output_vertex(node_t *vertex)
+{
+    return (vertex->value & OUTPUT_VERTEX) == OUTPUT_VERTEX;
+}
+
+int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph, history_t *history)
 {
     queue_t *queue;
     const adjacecny_list_t *list;
@@ -437,6 +508,7 @@ int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph)
     node_t *curr;
     int number;
     int rc;
+    bool found_lambda;
 
     list = &source_graph->adjacency_list;
     new_list = &new_graph->adjacency_list;
@@ -445,10 +517,10 @@ int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph)
     if (queue == NULL)
         return ERR_NO_MEMORY;
 
-    int found_lambda = 1;
+    found_lambda = true;
     while (found_lambda)
     {
-        found_lambda = 0;
+        found_lambda = false;
 
         for (size_t i = 0; i < list->max_size; i++)
         {
@@ -462,22 +534,25 @@ int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph)
                 {
                     if (!graph_contains_arc(new_graph, root->number, curr->number, curr->value))
                     {
-                        rc = graph_add_arc(new_graph, root->number, curr->number, curr->value);
+                        rc = update_arc(source_graph, new_graph, history, root->number, curr->number, curr->value);
                         if (rc != EXIT_SUCCESS)
                         {
                             free_queue(queue);
+                            free_history(history);
                             return rc;
                         }
-                        found_lambda = 1;
+                        found_lambda = true;
                     }
+
                     continue;
                 }
-                if (list->vertices[curr->number] != NULL)
+                if (list->vertices[curr->number] != NULL && is_output_vertex(list->vertices[curr->number]) && !is_output_vertex(new_list->vertices[root->number]))
                 {
-                    rc = graph_add_vertex(new_graph, root->number, list->vertices[curr->number]->value & OUTPUT_VERTEX);
+                    rc = update_vertex(new_graph, history, root->number, list->vertices[curr->number]->value);
                     if (rc != EXIT_SUCCESS)
                     {
                         free_queue(queue);
+                        free_history(history);
                         return rc;
                     }
                 }
@@ -498,6 +573,7 @@ int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph)
                 if (rc != EXIT_SUCCESS)
                 {
                     free_queue(queue);
+                    free_history(history);
                     return rc;
                 }
                 for (curr = list->vertices[number]->next; curr != NULL; curr = curr->next)
@@ -506,22 +582,24 @@ int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph)
                     {
                         if (!graph_contains_arc(new_graph, root->number, curr->number, curr->value))
                         {
-                            rc = graph_add_arc(new_graph, root->number, curr->number, curr->value);
+                            rc = update_arc(source_graph, new_graph, history, root->number, curr->number, curr->value);
                             if (rc != EXIT_SUCCESS)
                             {
                                 free_queue(queue);
+                                free_history(history);
                                 return rc;
                             }
-                            found_lambda = 1;
+                            found_lambda = true;
                         }
                         continue;
                     }
-                    if (list->vertices[curr->number] != NULL)
+                    if (list->vertices[curr->number] != NULL && is_output_vertex(list->vertices[curr->number]) && !is_output_vertex(new_list->vertices[root->number]))
                     {
-                        rc = graph_add_vertex(new_graph, root->number, list->vertices[curr->number]->value & OUTPUT_VERTEX);
+                        rc = update_vertex(new_graph, history, root->number, list->vertices[curr->number]->value);
                         if (rc != EXIT_SUCCESS)
                         {
                             free_queue(queue);
+                            free_history(history);
                             return rc;
                         }
                     }
@@ -531,6 +609,7 @@ int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph)
                         if (rc != EXIT_SUCCESS)
                         {
                             free_queue(queue);
+                            free_history(history);
                             return rc;
                         }
                     }
@@ -544,14 +623,87 @@ int add_non_lambda_transitions(const graph_t *source_graph, graph_t *new_graph)
     return EXIT_SUCCESS;
 }
 
-graph_t *remove_lambda_transitions(const graph_t *graph)  // , history_t *history)
+int remove_arcs_to_node(const adjacecny_list_t *list, history_t *history, int number)
+{
+    node_t *root;
+    operation_t *operation;
+
+    for (size_t i = 0; i < list->max_size; i++)
+    {
+        if (i == number)
+            continue;
+
+        root = list->vertices[i];
+        if (root == NULL)
+            continue;
+
+        for (node_t *curr = root->next; curr != NULL; curr = curr->next)
+        {
+            if (curr->number != number)
+                continue;
+
+            operation = operation_remove_arc(root->number, curr->number, curr->value);
+            if (operation == NULL)
+                return ERR_NO_MEMORY;
+            history_push(history, operation);
+        }
+    }
+
+    return EXIT_SUCCESS;
+}
+
+int remove_lambda_nodes(const graph_t *source_graph, graph_t *new_graph, history_t *history)
+{
+    int rc;
+    const adjacecny_list_t *list;
+    const adjacecny_list_t *new_list;
+    node_t *root;
+    operation_t *operation;
+
+    list = &source_graph->adjacency_list;
+    new_list = &new_graph->adjacency_list;
+
+    for (size_t i = 0; i < list->max_size; i++)
+    {
+        root = list->vertices[i];
+        if (root == NULL || new_list->vertices[root->number] != NULL)
+            continue;
+
+        rc = remove_arcs_to_node(list, history, root->number);
+        if (rc != EXIT_SUCCESS)
+            return rc;
+
+        for (node_t *curr = root->next; curr != NULL; curr = curr->next)
+        {
+            operation = operation_remove_arc(root->number, curr->number, curr->value);
+            if (operation == NULL)
+                return ERR_NO_MEMORY;
+            history_push(history, operation);
+        }
+        operation = operation_remove_vertex(root->number, root->value);
+        if (operation == NULL)
+            return ERR_NO_MEMORY;
+        history_push(history, operation);
+    }
+
+    return EXIT_SUCCESS;
+}
+
+graph_t *remove_lambda_transitions(const graph_t *graph, history_t *history)
 {
     int rc;
     graph_t *new_graph = create_graph(INIT_GRAPH_SIZE);
 
-    // history = new_history();
     filter_vertices(graph, new_graph);
-    rc = add_non_lambda_transitions(graph, new_graph);
+
+    rc = add_non_lambda_transitions(graph, new_graph, history);
+    if (rc != EXIT_SUCCESS)
+    {
+        free_graph(new_graph);
+        return NULL;
+    }
+
+    rc = remove_lambda_nodes(graph, new_graph, history);
     if (rc != EXIT_SUCCESS)
     {
         free_graph(new_graph);
@@ -561,24 +713,166 @@ graph_t *remove_lambda_transitions(const graph_t *graph)  // , history_t *histor
     return new_graph;
 }
 
-int write_graph_connections(FILE *file, graph_t *graph, void *arg)
+int apply_operation(graph_t *graph, operation_t *operation)
 {
     int rc;
-    char *from_color;
-    char *from_style;
-    adjacecny_list_t *adjacency_list;
+
+    if (operation->operation_type == REMOVE)
+    {
+        if (operation->to_number == NO_VALUE)
+        {
+            rc = graph_remove_vertex(graph, operation->from_number, operation->value);
+        }
+        else
+        {
+            rc = graph_remove_arc(graph, operation->from_number, operation->to_number, operation->value);
+        }
+    }
+    else if (operation->operation_type == ADD)
+    {
+        if (operation->to_number == NO_VALUE)
+        {
+            rc = graph_add_vertex(graph, operation->from_number, operation->value);
+        }
+        else
+        {
+            rc = graph_add_arc(graph, operation->from_number, operation->to_number, operation->value);
+        }
+    }
+    else
+    {
+        return EXIT_FAILURE;
+    }
+
+    return rc;
+}
+
+int undo_operation(graph_t *graph, operation_t *operation)
+{
+    int rc;
+
+    if (operation->operation_type == REMOVE)
+    {
+        if (operation->to_number == NO_VALUE)
+        {
+            rc = graph_add_vertex(graph, operation->from_number, operation->value);
+        }
+        else
+        {
+            rc = graph_add_arc(graph, operation->from_number, operation->to_number, operation->value);
+        }
+    }
+    else if (operation->operation_type == ADD)
+    {
+        if (operation->to_number == NO_VALUE)
+        {
+            rc = graph_remove_vertex(graph, operation->from_number, operation->value);
+        }
+        else
+        {
+            rc = graph_remove_arc(graph, operation->from_number, operation->to_number, operation->value);
+        }
+    }
+    else
+    {
+        return EXIT_FAILURE;
+    }
+
+    return rc;
+}
+
+int history_prev(history_t *history, graph_t *graph)
+{
+    operation_t *operation;
+    int rc;
+
+    if (history->curr == history->head)
+    {
+        puts("ALREADY AT THE FIRST HISTORY PAGE");
+        return EXIT_SUCCESS;
+    }
+
+    if (history->prev != history->curr)
+        history->curr = history->curr->prev;
+    history->prev = history->curr->prev;
+
+    operation = history->curr;
+
+    if (operation == history->head)
+    {
+        puts("FIRST HISTORY PAGE");
+    }
+
+    printf("UNDO %s: %d %d %d\n", operation->operation_type == ADD ? "ADD" : "REMOVE", operation->from_number, operation->to_number, operation->value);
+    if (history->curr == NULL)
+    {
+        fputs("Previous operation is null pointer", stderr);
+        return EXIT_FAILURE;
+    }
+
+    rc = undo_operation(graph, operation);
+    if (rc != EXIT_SUCCESS)
+        return rc;
+
+    graph->last_operation = operation->prev;
+
+    return EXIT_SUCCESS;
+}
+
+int history_next(history_t *history, graph_t *graph)
+{
+    operation_t *operation;
+    int rc;
+
+    if (history->prev == history->curr)
+    {
+        puts("ALREADY AT THE LAST HISTORY PAGE");
+        return EXIT_SUCCESS;
+    }
+
+    operation = history->curr;
+
+    if (operation == history->tail)
+    {
+        puts("LAST HISTORY PAGE");
+    }
+
+    printf("APPLY %s: %d %d %d\n", operation->operation_type == ADD ? "ADD" : "REMOVE", operation->from_number, operation->to_number, operation->value);
+    if (history->curr == NULL)
+        return EXIT_FAILURE;
+
+    rc = apply_operation(graph, operation);
+    if (rc != EXIT_SUCCESS)
+        return rc;
+
+    graph->last_operation = operation;
+
+    history->prev = history->curr;
+    if (history->curr->next != NULL)
+        history->curr = history->curr->next;
+
+    return EXIT_SUCCESS;
+}
+
+int write_graph_connections(FILE *file, const graph_t *graph, void *arg)
+{
+    int rc;
+    char *color;
+    char *style;
+    char *arc_color;
+    const adjacecny_list_t *list;
     node_t *root;
     // graph_t *new_graph = (graph_t*)arg;
 
-    adjacency_list = &graph->adjacency_list;
+    list = &graph->adjacency_list;
 
-    for (size_t i = 0; i < adjacency_list->max_size; i++)
+    for (size_t i = 0; i < list->max_size; i++)
     {
-        root = adjacency_list->vertices[i];
+        root = list->vertices[i];
         if (root == NULL)
             continue;
 
-        if ((root->value & VERTEX_MASK) == INPUT_VERTEX)
+        if ((root->value & INPUT_VERTEX) == INPUT_VERTEX)
         {
             rc = fprintf(file, "0->%d;\n", root->number);
             if (rc == EOF)
@@ -586,68 +880,83 @@ int write_graph_connections(FILE *file, graph_t *graph, void *arg)
             rc = fprintf(file, "0 [style=\"invisible\"];\n");
             if (rc == EOF)
                 return rc;
-            from_style = FILLED;
-            from_color = GREEN;
-            rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
-                         root->number, from_style, from_color);
         }
-        else if ((root->value & VERTEX_MASK) == OUTPUT_VERTEX)
+
+        if ((root->value & OUTPUT_VERTEX) == OUTPUT_VERTEX)
         {
-            rc = fprintf(file, "%d->%d;\n", root->number, -root->number);
+            arc_color = "";
+
+            if (graph->last_operation != NULL &&
+                graph->last_operation->from_number == root->number &&
+                graph->last_operation->to_number == NO_VALUE &&
+                (graph->last_operation->value & OUTPUT_VERTEX) == OUTPUT_VERTEX)
+            {
+                arc_color = RED;
+            }
+
+            rc = fprintf(file, "%d->%d [color=\"%s\"];\n", root->number, -root->number, arc_color);
             if (rc == EOF)
                 return rc;
             rc = fprintf(file, "%d [style=\"invisible\"];\n", -root->number);
             if (rc == EOF)
                 return rc;
-            from_style = FILLED;
-            from_color = RED;
-            rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
-                         root->number, from_style, from_color);
         }
-        else if ((root->value & INPUT_VERTEX) == INPUT_VERTEX &&
-                 (root->value & OUTPUT_VERTEX) == OUTPUT_VERTEX)
+
+        if ((root->value & INPUT_VERTEX) == INPUT_VERTEX &&
+            (root->value & OUTPUT_VERTEX) == OUTPUT_VERTEX)
         {
-            rc = fprintf(file, "0->%d;\n", root->number);
-            if (rc == EOF)
-                return rc;
-            rc = fprintf(file, "0 [style=\"invisible\"];\n");
-            if (rc == EOF)
-                return rc;
-            rc = fprintf(file, "%d->%d;\n", root->number, -root->number);
-            if (rc == EOF)
-                return rc;
-            rc = fprintf(file, "%d [style=\"invisible\"];\n", -root->number);
-            if (rc == EOF)
-                return rc;
-            from_style = WEDGED;
-            from_color = RED":"GREEN;
+            style = WEDGED;
+            color = RED":"GREEN;
             rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
-                         root->number, from_style, from_color);
+                         root->number, style, color);
+        }
+        else if ((root->value & INPUT_VERTEX) == INPUT_VERTEX)
+        {
+            style = FILLED;
+            color = GREEN;
+            rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
+                         root->number, style, color);
+        }
+        else if ((root->value & OUTPUT_VERTEX) == OUTPUT_VERTEX)
+        {
+            style = FILLED;
+            color = RED;
+            rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
+                         root->number, style, color);
         }
 
         for (node_t *curr = root->next; curr != NULL; curr = curr->next)
         {
-            from_style = "";
-            from_color = "";
+            style = "";
+            color = "";
+            arc_color = "";
 
-            if (graph->adjacency_list.vertices[curr->number] != NULL)
+            if (graph->last_operation != NULL &&
+                graph->last_operation->from_number == root->number &&
+                graph->last_operation->to_number == curr->number &&
+                graph->last_operation->value == curr->value)
             {
-                from_style = FILLED;
-                from_color = ORANGE;
+                arc_color = RED;
+            }
+
+            if (list->vertices[curr->number] != NULL)
+            {
+                style = FILLED;
+                color = ORANGE;
             }
 
             if (curr->value != '~')
-                rc = fprintf(file, "%d -> %d [label=\"%c\"];\n", root->number, curr->number, curr->value);
+                rc = fprintf(file, "%d -> %d [label=\"%c\" color=\"%s\"];\n", root->number, curr->number, curr->value, arc_color);
             else
                 rc = fprintf(file, "%d -> %d [label=\"λ\"];\n", root->number, curr->number);
             if (rc == EOF)
                 return rc;
 
-            if (adjacency_list->vertices[curr->number] != NULL && adjacency_list->vertices[curr->number]->value != INTER_VERTEX)
+            if (list->vertices[curr->number] != NULL && list->vertices[curr->number]->value != INTER_VERTEX)
                 continue;
 
             rc = fprintf(file, "%d [style=\"%s\", fillcolor=\"%s\"];\n",
-                         curr->number, from_style, from_color);
+                         curr->number, style, color);
             if (rc == EOF)
                 return rc;
         }
@@ -665,11 +974,11 @@ void print_adjacency_list(graph_t *graph)
         root = list->vertices[i];
         if (root == NULL)
             continue;
-        printf("%d (%d): ", root->number, root->value);
+        printf("%d (%d):", root->number, root->value);
 
         for (node_t *curr = root->next; curr != NULL; curr = curr->next)
         {
-            printf("%d (%c)|", curr->number, curr->value);
+            printf(" %d (%c)|", curr->number, curr->value);
         }
 
         putc('\n', stdout);

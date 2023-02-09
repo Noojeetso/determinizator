@@ -15,9 +15,9 @@ create_graph_file_name(char *graph_name,
 }
 
 int
-graph_to_dot(graph_t *graph,
+graph_to_dot(const graph_t *graph,
              char *graph_name,
-             int (*write_graph_connections)(FILE *file, graph_t *graph, void *arg),
+             int (*write_graph_connections)(FILE *file, const graph_t *graph, void *arg),
              void *arg)
 {
     int rc;
