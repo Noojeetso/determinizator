@@ -212,6 +212,7 @@ int graph_add_vertex(graph_t *graph, int number, vertex_type_t vertex_type)
     if (vertex == NULL)
         return ERR_NO_MEMORY;
 
+    vertex->value |= INTER_VERTEX;
     list->vertices[number] = vertex;
 
     return EXIT_SUCCESS;

@@ -1,8 +1,8 @@
 #include "unit_tests.h"
-#include "graph.h"
 #include <stdio.h>
-
 #include "graphviz.h"
+#include "history.h"
+
 
 #define DATA_FOLDER "unit_tests/data/"
 #define POS_IN(x) "pos_" x "_in.txt"
@@ -14,6 +14,7 @@
                             graph_t *graph;                                             \
                             graph_t *new_graph;                                         \
                             graph_t *exp_graph;                                         \
+                            history_t *history = create_history();                      \
                                                                                         \
                             graph = graph_from_file(DATA_FOLDER POS_IN( num ));         \
                             ck_assert_ptr_nonnull(graph);                               \
@@ -27,13 +28,14 @@
                             free_graph(graph);                                          \
                             free_graph(exp_graph);                                      \
                             free_graph(new_graph);                                      \
+                            free_history(history);
 
 #define TEST(name, num)                                                                 \
                         START_TEST( name )                                              \
                         {                                                               \
                             TEST_HEAD( num )                                            \
                                                                                         \
-                            new_graph = remove_lambda_transitions(graph);               \
+                            new_graph = remove_lambda_transitions(graph, history);      \
                                                                                         \
                             TEST_TAIL                                                   \
                         }                                                               \
@@ -47,7 +49,7 @@
                             puts("graph");                                              \
                             print_adjacency_list(graph);                                \
                                                                                         \
-                            new_graph = remove_lambda_transitions(graph);               \
+                            new_graph = remove_lambda_transitions(graph, history);      \
                                                                                         \
                             puts("exp_graph");                                          \
                             print_adjacency_list(exp_graph);                            \
