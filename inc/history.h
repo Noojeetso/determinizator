@@ -53,4 +53,6 @@ operation_t *operation_remove_vertex(int number, char value);
 
 operation_t *operation_remove_arc(int number_from, int number_to, char value);
 
+void print_history(history_t *history);
+
 #endif  // __HISTORY_H__

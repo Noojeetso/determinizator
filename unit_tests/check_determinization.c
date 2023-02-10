@@ -12,9 +12,8 @@
                             int rc;                                                     \
                                                                                         \
                             graph_t *graph;                                             \
-                            graph_t *new_graph;                                         \
                             graph_t *exp_graph;                                         \
-                            history_t *history = create_history();                      \
+                            history_t *history;                                         \
                                                                                         \
                             graph = graph_from_file(DATA_FOLDER POS_IN( num ));         \
                             ck_assert_ptr_nonnull(graph);                               \
@@ -22,12 +21,11 @@
                             ck_assert_ptr_nonnull(exp_graph);
 
 #define TEST_TAIL                                                                       \
-                            rc = compare_graphs(new_graph, exp_graph);                  \
+                            rc = compare_graphs(graph, exp_graph);                      \
                             ck_assert_int_eq(rc, GRAPHS_EQUAL);                         \
                                                                                         \
                             free_graph(graph);                                          \
                             free_graph(exp_graph);                                      \
-                            free_graph(new_graph);                                      \
                             free_history(history);
 
 #define TEST(name, num)                                                                 \
@@ -35,7 +33,13 @@
                         {                                                               \
                             TEST_HEAD( num )                                            \
                                                                                         \
-                            new_graph = remove_lambda_transitions(graph, history);      \
+                            history = get_lambda_transition_deletion_history(graph);    \
+                            ck_assert_ptr_nonnull(history);                             \
+                            do                                                          \
+                            {                                                           \
+                                rc = history_next(history, graph);                      \
+                            }                                                           \
+                            while (history->curr != history->prev);                     \
                                                                                         \
                             TEST_TAIL                                                   \
                         }                                                               \
@@ -48,17 +52,24 @@
                                                                                         \
                             puts("graph");                                              \
                             print_adjacency_list(graph);                                \
+                            graph_visualize(graph, "temp");                             \
                                                                                         \
-                            new_graph = remove_lambda_transitions(graph, history);      \
+                            history = get_lambda_transition_deletion_history(graph);    \
+                            ck_assert_ptr_nonnull(history);                             \
+                            do                                                          \
+                            {                                                           \
+                                rc = history_next(history, graph);                      \
+                                puts("new_graph");                                      \
+                                print_adjacency_list(graph);                            \
+                            }                                                           \
+                            while (history->curr != history->prev);                     \
                                                                                         \
                             puts("exp_graph");                                          \
                             print_adjacency_list(exp_graph);                            \
-                            puts("new_graph");                                          \
-                            print_adjacency_list(new_graph);                            \
-                                                                                        \
-                            graph_visualize(graph, "temp");                             \
-                            graph_visualize(new_graph, "temp_wo_lambda");               \
                             graph_visualize(exp_graph, "temp_exp");                     \
+                            puts("new_graph");                                          \
+                            print_adjacency_list(graph);                                \
+                            graph_visualize(graph, "temp_wo_lambda");                   \
                                                                                         \
                             TEST_TAIL                                                   \
                         }                                                               \

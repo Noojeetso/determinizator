@@ -88,6 +88,7 @@ operation_t *operation_remove_arc(int from_number, int to_number, char value)
 history_t *create_history(void)
 {
     history_t *history;
+
     history = malloc(sizeof(*history));
     if (history == NULL)
     {
@@ -135,4 +136,30 @@ void history_push(history_t *history, operation_t *operation)
     operation->prev = history->tail;
     // operation->next = history->head;
     history->tail = operation;
+}
+
+void print_history(history_t *history)
+{
+    operation_t *operation;
+
+    if (history == NULL)
+        return;
+
+    operation = history->head;
+
+    if (operation == NULL)
+    {
+        puts("History is empty");
+        return;
+    }
+
+    int count = 0;
+    puts("History:");
+    while (operation != NULL)
+    {
+        count++;
+        printf("%d: %s: %d %d %d\n", count, operation->operation_type == ADD ? "ADD" : "REMOVE", operation->from_number, operation->to_number, operation->value);
+        operation = operation->next;
+    }
+    putc('\n', stdout);
 }

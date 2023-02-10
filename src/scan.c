@@ -17,34 +17,6 @@ flush_input(void)
     return amount;
 }
 
-/*
-int
-scan_menu(int *key)
-{
-    int rc;
-
-    printf("%s", "Номер меню: ");
-
-    rc = scanf("%d", key);
-
-    if (flush_input() != 1)
-    {
-        print_newline();
-        fputs("Ошибка при считывании номера меню\n", stderr);
-        return EXIT_FAILURE;
-    }
-
-    if (rc != 1)
-    {
-        print_newline();
-        fputs("Не был введён номер меню\n", stderr);
-        return ERR_INPUT_NUMBER;
-    }
-
-    return EXIT_SUCCESS;
-}
-*/
-
 int
 scan_double(double *value,
             double min_value,

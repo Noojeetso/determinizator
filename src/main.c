@@ -38,7 +38,6 @@ int main(void)
 {
     int rc;
     graph_t *graph;
-    graph_t *new_graph;
     history_t *history;
     char current_symbol;
 
@@ -48,8 +47,14 @@ int main(void)
 
     // rc = graph_visualize(graph, "graph");
 
-    history = create_history();
-    new_graph = remove_lambda_transitions(graph, history);
+    history = get_lambda_transition_deletion_history(graph);
+    if (history == NULL)
+    {
+        fputs("Error creating history\n", stderr);
+        return EXIT_FAILURE;
+    }
+
+    print_history(history);
 
     // rc = graph_visualize(new_graph, "graph_wo_lambda");
     print_adjacency_list(graph);
@@ -77,7 +82,6 @@ int main(void)
     }
 
     free_graph(graph);
-    free_graph(new_graph);
     free_history(history);
 
     return rc;
